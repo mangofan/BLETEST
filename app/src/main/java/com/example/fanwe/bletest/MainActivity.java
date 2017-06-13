@@ -15,11 +15,14 @@ import android.util.SparseArray;
 import android.widget.TextView;
 
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Map;
 
 import service.BleService;
+import utlis.FileCache;
 import utlis.MyUtlis;
+
 
 public class MainActivity extends AppCompatActivity {
     private static final int ENABLE_BLUETOOTH = 1;
@@ -27,11 +30,12 @@ public class MainActivity extends AppCompatActivity {
     public static BluetoothAdapter bluetoothAdapter;
     TextView text, text1, text2, text3, text4, text5;
     int RSSI_LIMIT = 5, BLE_CHOOSED_NUM = 4;
-    public static Map<String, double[]> bleNodeLoc = new HashMap<>();    //固定节点的位置Map
+    public static Map<String, String> bleNodeLoc = new HashMap<>();    //固定节点的位置Map
     Map<String, Float> bleNodeRssiBias = new HashMap<>();
     Map<String, ArrayList<Double>> mAllRssi = new HashMap<>();    //储存RSSI的MAP
     Map<String, Double> mRssiFilterd = new HashMap<>();     //过滤后的RSSI的Map
     private BleService bleService;
+    StringBuffer stringBuffer = new StringBuffer();
 
     //建立Activity和service之间的连接
     private ServiceConnection mConnection = new ServiceConnection() {
@@ -39,7 +43,6 @@ public class MainActivity extends AppCompatActivity {
         public void onServiceConnected(ComponentName name, IBinder service) {
             //连接时调用,返回一个BleService对象
             bleService = ((BleService.MyBinder) service).getService();
-
             //注册回调接口来接收蓝牙信息
             bleService.setBleListener(new BleListener() {
                 @Override
@@ -51,9 +54,10 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
-            //service意外断开时接收
             bleService = null;
         }
+
+
     };
 
     public void handleMessage(String mac) {
@@ -73,6 +77,8 @@ public class MainActivity extends AppCompatActivity {
             mAllRssi.put(remoteMAC, list);
         }
         String need = remoteMAC + " " + rssi + "\n";
+        String needMacRssi = "";
+        String needVariance = "";
         Log.e("hh", need);
         double getAvgOfFilterdRssiValueList = MyUtlis.LogarNormalDistribution(mAllRssi.get(remoteMAC), RSSI_LIMIT);  //获取滤波后的信号强度表和强度平均值
         mRssiFilterd.put(remoteMAC, getAvgOfFilterdRssiValueList);   //更新MAC地址对应信号强度的map
@@ -82,13 +88,25 @@ public class MainActivity extends AppCompatActivity {
                 need += SortedNodeMacAndRssi.get(1).get(i) + " " + SortedNodeMacAndRssi.get(2).get(i) + "\n";
             }
             text.setText(need);
-//                            String nearestNode = SortedNodeMacAndRssi.get(1).get(0);
+            String locationOnBluetooth = MyUtlis.getMassCenter(SortedNodeMacAndRssi, bleNodeLoc);   //通过质心定位得到位置
+            needMacRssi += Calendar.getInstance().getTimeInMillis() % 100000 + " " + locationOnBluetooth + "  ";
+            for (int i = 0; i < SortedNodeMacAndRssi.get(1).size(); i++) {
+                needMacRssi += SortedNodeMacAndRssi.get(1).get(i).split(":")[5] + "," + SortedNodeMacAndRssi.get(2).get(i) + "  ";
+            }
+            for (int i = 0; i < SortedNodeMacAndRssi.get(3).size(); i++) {
+                needVariance += SortedNodeMacAndRssi.get(3).get(i) + "\t";
+            }
+
+            stringBuffer.append(needMacRssi);
+            stringBuffer.append(needVariance);
+            stringBuffer.append("\n");
+
 
             String Node1 = "19:18:FC:01:F0:FD";
             String Node2 = "19:18:FC:01:F0:FC";
-            String Node3 = "19:18:FC:01:F0:F9";
-            String Node4 = "19:18:FC:01:F0:FE";
-            String Node5 = "19:18:FC:01:F0:FD";
+            String Node3 = "19:18:FC:01:F0:FE";
+            String Node4 = "19:18:FC:01:F1:0E";
+            String Node5 = "19:18:FC:01:F1:0F";
             if (mAllRssi.containsKey(Node1)) {
                 ArrayList<Double> nearestNodeList = mAllRssi.get(Node1);
                 String need1 = Node1.split(":")[5] + "\n";
@@ -173,23 +191,36 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onPause() {
+        super.onPause();
+        Thread thread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                FileCache.saveFile(stringBuffer + "\n");  //位置输出到文件中。
+            }
+        });
+        thread.start();
+        unbindService(mConnection);
+        stopService(new Intent(this, BleService.class));
+    }
+
+    @Override
     protected void onDestroy() {
         super.onDestroy();
-        stopService(new Intent(this, BleService.class));
     }
 
 //    初始化存储节点位置和MAC地址的Map
     private void initBleMap(){
-        double[] location21 = {11.5, 0.7};
-        double[] location22 = {15.8, 0.7};
-        double[] location23 = {7.8, 4.7};
-        double[] location24 = {11.8, 4.7};
-        double[] location25 = {15.8, 4.7};
-        double[] location26 = {19.8, 4.7};
-        double[] location27 = {7.8, 8.7};
-        double[] location28 = {11.8, 8.7};
-        double[] location29 = {15.8, 8.7};
-        double[] location30 = {19.8, 8.7};
+        String location21 = 11.5 + "," + 0.7;
+        String location22 = 15.8 + "," + 0.7;
+        String location23 = 7.8 + "," + 4.7;
+        String location24 = 11.8 + "," + 4.7;
+        String location25 = 15.8 + "," + 4.7;
+        String location26 = 19.8 + "," + 4.7;
+        String location27 = 7.8 + "," + 8.7;
+        String location28 = 11.8 + "," + 8.7;
+        String location29 = 15.8 + "," + 8.7;
+        String location30 = 19.8 + "," + 8.7;
 
         bleNodeLoc.put("19:18:FC:01:F1:0E", location21);
         bleNodeLoc.put("19:18:FC:01:F1:0F", location22);
