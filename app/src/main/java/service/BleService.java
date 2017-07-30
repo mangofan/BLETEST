@@ -1,9 +1,7 @@
 package service;
 
 import android.app.Service;
-import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothManager;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
@@ -24,7 +22,7 @@ import java.util.List;
 
 public class BleService extends Service {
     BluetoothLeScanner bluetoothLeScanner;
-    private static final String TAG = "hh";
+    private static final String TAG = "BleService";
     private BleListener bleListener;
 
     public void setBleListener(BleListener bleListener){
@@ -68,6 +66,7 @@ public class BleService extends Service {
                     if (MainActivity.bleNodeLoc.containsKey(mac)) {
                         String macRssi = mac + "," + rssi;
                         bleListener.onBleComing(macRssi);
+                        Log.w(TAG,macRssi);
                     }
                 }
             }
@@ -102,7 +101,6 @@ public class BleService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        Log.d("onDestroy","used");
         bluetoothLeScanner.stopScan(leCallback);
     }
 

@@ -3,22 +3,119 @@ package utlis;
  * Created by fanwe on 2017/5/23.
  */
 
+import android.support.v4.util.LongSparseArray;
 import android.util.SparseArray;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.LinkedBlockingDeque;
 
 import static java.math.BigDecimal.ROUND_HALF_UP;
 
 public class MyUtlis {
-    private static double varianceLimit = 0.5;   //对于方差的限制
+    private static long lastTimeOfSensorFlag = 0;
+    private static ArrayList<String> locationListForStandx = new ArrayList<>();
+    private static ArrayList<String> locationListForStandy = new ArrayList<>();
+    public static int MOVING = 0, STANDING = 1;
+
+    // 根据计步器，区分现在是在移动还是已经停止不动；维护一个列表，存储计步发生后所有的位置，当出现新的计步之后，表清空，重新维护，为了静止时可以对发生的位置求平均。
+    public static int getSensorState(long nowTime, long lastTimeOfSensor, String newLocation){
+        if(lastTimeOfSensor != lastTimeOfSensorFlag) {
+            lastTimeOfSensorFlag = lastTimeOfSensor;
+            locationListForStandx.clear();
+            locationListForStandy.clear();
+        }
+        String[] location = newLocation.split(",");
+        locationListForStandx.add(0,location[0]);
+        locationListForStandy.add(0,location[1]);
+
+        int toReturn;
+        int stepCountNotUpdateLast = 3000;
+        if((nowTime - lastTimeOfSensor) > stepCountNotUpdateLast){   //如果当前时刻与计步器最后更新的步数的时刻相差3秒以上，认为这段时间没有移动
+            toReturn = STANDING;
+        }else{
+            toReturn =  MOVING;
+        }
+        return toReturn;
+    }
+
+    public static String getStandLocation(){
+        cutListAndDelete(locationListForStandx, 100);
+        cutListAndDelete(locationListForStandy, 100);
+        double locationx = getAvgBigDecimal(locationListForStandx);
+        double locationy = getAvgBigDecimal(locationListForStandy);
+        return locationx + "," + locationy;
+    }
+
+    //切割子list，并且去掉之后需要的值之后的值
+    private static <T> void cutListAndDelete(List<T> list, int limit){
+        if(list.size() > limit){
+            for(int i = list.size()-1; i > limit-1; i--){
+                list.remove(i);
+            }
+        }
+    }
+
+    //求ArrayLIst均值
+    private static double getAvgBigDecimal(List list) {
+        BigDecimal sum = new BigDecimal("0.0");
+        BigDecimal avg = new BigDecimal("0.0");
+        if (list.size() != 0) {
+            for (int i = 0; i < list.size(); i++) {
+                sum = sum.add(new BigDecimal(list.get(i).toString()));
+            }
+            avg = sum.divide(new BigDecimal(String.valueOf(list.size())),1, ROUND_HALF_UP);
+        }
+
+        return avg.doubleValue();
+    }
+
+    public static String findTheLoc(int i, int end, LongSparseArray<String>map){
+        //对这一秒内出现的节点进行计数，取最大。
+        int flag = 0;
+        String locationStringFinal = map.valueAt(i);
+        Map<String, Integer> map1 = new HashMap<>();
+        for (int j = i; j < end; j++) {
+            String location = map.valueAt(j);
+            if (map1.containsKey(location)) {
+                Integer count = map1.get(location);
+                count = count + 1;
+                map1.put(location, count);
+            } else {
+                map1.put(location, 0);
+            }
+        }
+        for (String loc : map1.keySet()) {
+            int locNum = map1.get(loc);
+            if (locNum > flag) {
+                flag = locNum;
+                locationStringFinal = loc;
+            }
+        }
+        return locationStringFinal;
+    }
+
+    public static int searchTimeList(LongSparseArray map, int k){
+        long time = map.keyAt(k) + 1000;
+        int j = 0;
+        for(int i = 0; i < map.size(); i++){
+            if(map.keyAt(i) < time){
+                j = i;
+            }else{
+                break;
+            }
+        }
+        return j;
+    }
 
     //使用质心定位得到坐标,使用BigDecimal来减少将6.7表示为6.6999999999的情况
     public static String getMassCenter(SparseArray<ArrayList<String>> SortedNodeMacAndRssi, Map<String, String> bleNodeLoc) {
+        double varianceLimit = 4;   //对于方差的限制
         ArrayList<String> SortedNodeMacList = SortedNodeMacAndRssi.get(1);   //获取排好序的节点的MAC地址的列表
         ArrayList<String> SortedNodeRssiList = SortedNodeMacAndRssi.get(2);  //获取排好序的节点的RSSI地址的列表
         int lenOfMacAndRssi = SortedNodeMacList.size();   //首先获取节点列表的长度
@@ -93,7 +190,7 @@ public class MyUtlis {
     }
 
     //切割子list
-    public static <T> ArrayList<T> cutList(List<T> list, int limit) {
+    private static <T> ArrayList<T> cutList(List<T> list, int limit) {
         int trueLimit = limit < list.size() ? limit : list.size();
         ArrayList<T> returnList = new ArrayList<>();
         for (int i = 0; i < trueLimit; i++) {
@@ -130,7 +227,7 @@ public class MyUtlis {
     }
 
     //求ArrayLIst均值
-    public static double getAvg(List list) {
+    private static double getAvg(List list) {
         double sum = 0.0, avg = 0.0;
         if (list.size() != 0) {
             for (int i = 0; i < list.size(); i++) {
@@ -142,7 +239,7 @@ public class MyUtlis {
     }
 
     //求ArrayList标准差
-    public static double getStaDev(ArrayList list, Double avg, String distribution) {
+    private static double getStaDev(ArrayList list, Double avg, String distribution) {
         double stadardDev = 0.0;
         if (list.size() > 1) {
             for (int i = 0; i < list.size(); i++) {
@@ -165,14 +262,14 @@ public class MyUtlis {
         return list1;
     }
 
-    //切割子list，并且去掉之后需要的值之后的值
-    private static <T> void cutListAndDelete(List<T> list, int limit){
-        if(list.size() > limit){
-            for(int i = list.size()-1; i > limit-1; i--){
-                list.remove(i);
-            }
-        }
-    }
+//    //切割子list，并且去掉之后需要的值之后的值
+//    private static <T> void cutListAndDelete(List<T> list, int limit){
+//        if(list.size() > limit){
+//            for(int i = list.size()-1; i > limit-1; i--){
+//                list.remove(i);
+//            }
+//        }
+//    }
 
     //切割子listy
     public static <T> ArrayList<T> cutListAndDleteTo15(List<T> list, int limit) {
